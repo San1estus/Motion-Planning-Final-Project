@@ -89,7 +89,7 @@ void updatePathBuffers(const std::vector<float>& vertices) {
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_DYNAMIC_DRAW);
 }
 
-// RRT Implementation
+// RRT implementation and flags
 struct Node {
     float x, y, theta;
     Node* parent;
@@ -115,8 +115,8 @@ struct RRT{
     std::uniform_real_distribution<float> sampleTheta{-PI, PI};
 
     float distWheels = 0.5f; 
-    void init(float minX, float maxX, float minY, float maxY){
-        Node* init = addNode(0.0f, 0.0f, 0.0f, nullptr);
+    void init(float minX, float maxX, float minY, float maxY, float startX, float startY){
+        Node* init = addNode(startX, startY, 0.0f, nullptr);
         rng = std::mt19937(std::random_device{}());
         distX = std::uniform_real_distribution<float>(minX, maxX);
         distY = std::uniform_real_distribution<float>(minY, maxY);
@@ -210,6 +210,69 @@ struct RRT{
     }
 };
 
+struct AppState {
+    RRT rrt;
+    Node* goalNode = nullptr;
+    bool startSet = false;
+    bool goalSet = false;
+    bool startAlgorithm = false;
+    std::vector<float> initAndGoalVertices = {0.0f, 0.0f, 0.0f, 0.0f}; // startX, startY, goalX, goalY
+    std::vector<Node*> path;
+    std::vector<float> pathVertices;
+    bool pathFound = false;
+    int pathIndex = 0;
+};
+
+// OpenGL callbacks
+float startX, startY, goalX, goalY;
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    AppState* state = (AppState*)glfwGetWindowUserPointer(window);
+    
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
+    float xworld = (float)xpos / width * 2.0f - 1.0f;
+    float yworld = 1.0f - (float)ypos / height * 2.0f;
+    
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        state->initAndGoalVertices[0] = xworld;
+        state->initAndGoalVertices[1] = yworld;
+        state->startSet = true;
+    } else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        state->initAndGoalVertices[2] = xworld;
+        state->initAndGoalVertices[3] = yworld;
+        state->goalSet = true;
+    }
+}
+
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    AppState* state = (AppState*)glfwGetWindowUserPointer(window);
+    
+    switch (key) {
+        case GLFW_KEY_R:
+            if (action == GLFW_PRESS) {
+                state->rrt.nodes.clear();
+                state->rrt.currIter = 0;
+                state->goalNode = nullptr;
+                state->path.clear();
+                state->pathVertices.clear();
+                state->pathFound = false;
+                state->pathIndex = 0;
+            }
+            break;
+        case GLFW_KEY_SPACE:
+            if (action == GLFW_PRESS) {
+                if(state->startSet && state->goalSet) state->startAlgorithm = true;
+                state->rrt.init(-1.0f, 1.0f, -1.0f, 1.0f, state->initAndGoalVertices[0], state->initAndGoalVertices[1] );
+            }
+            break;
+        case GLFW_KEY_ESCAPE:
+            if (action == GLFW_PRESS)
+                glfwSetWindowShouldClose(window, true);
+            break;
+    }
+}
 
 int main() {
     GLFWwindow* window;
@@ -233,78 +296,86 @@ int main() {
     
     std::string vertSrc = loadShaderSource(std::string(SHADER_DIR) + "vertex.glsl");
     std::string fragSrc = loadShaderSource(std::string(SHADER_DIR) + "fragment.glsl");
-    GLuint shaderProgram = createShaderProgram(vertSrc.c_str(), fragSrc.c_str());;
+    GLuint shaderProgram = createShaderProgram(vertSrc.c_str(), fragSrc.c_str());
     GLint colorLoc = glGetUniformLocation(shaderProgram, "uColor");
     
-    RRT rrt;
-    rrt.init(-1.0f, 1.0f, -1.0f, 1.0f);
-    Node* goalNode = nullptr;
-    std::vector<Node*> path;
-    std::vector<float> pathVertices;
-    std::vector<float> initAndGoalVertices = {0.0f, 0.0f, 0.8f, 0.8f};
     std::vector<float> carVertices;
-    int pathIndex = 0;
-    bool pathFound = false;
     setupBuffers();
-    glBindBuffer(GL_ARRAY_BUFFER, pointsVBO); 
-    glBufferData(GL_ARRAY_BUFFER, initAndGoalVertices.size() * sizeof(float), initAndGoalVertices.data(), GL_STATIC_DRAW);
     glPointSize(10.0f);
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
+
+    AppState state;
+    glfwSetWindowUserPointer(window, &state);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
+    glfwSetKeyCallback(window, keyCallback);
+    
+    
+    glBindBuffer(GL_ARRAY_BUFFER, pointsVBO); 
+    glBufferData(GL_ARRAY_BUFFER, state.initAndGoalVertices.size() * sizeof(float), state.initAndGoalVertices.data(), GL_STATIC_DRAW);
     while(!glfwWindowShouldClose(window)) {
+        
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(shaderProgram);
         
         std::vector<float> edgeVertices;
-            if(!goalNode){
-                goalNode = rrt.build(initAndGoalVertices[2], initAndGoalVertices[3], 0.1f, 10000, 0.02f, 0.1f);
-                if(goalNode){
-                    path = rrt.getPath(goalNode);
+            
+        if(state.startAlgorithm){
+            if(!state.goalNode){
+                state.goalNode = state.rrt.build(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.1f, 10000, 0.02f, 0.1f);
+                if(state.goalNode){
+                    state.path = state.rrt.getPath(state.goalNode);
                 }
-                edgeVertices = rrt.getEdgeVertices();
+                edgeVertices = state.rrt.getEdgeVertices();
                 updateTreeBuffers(edgeVertices);
             } else{
-                edgeVertices = rrt.getEdgeVertices();
+                edgeVertices = state.rrt.getEdgeVertices();
             }
         
-        glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f);
-        glBindVertexArray(TreeVAO);
-        glDrawArrays(GL_LINES, 0, edgeVertices.size() / 2);
+            glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f);
+            glBindVertexArray(TreeVAO);
+            glDrawArrays(GL_LINES, 0, edgeVertices.size() / 2);
 
-        if(!path.empty()){
-            glUniform4f(colorLoc, 0.0f, 1.0f, 0.0f, 1.0f);
-            if(!pathFound){
-                for(size_t i = 1; i < path.size(); ++i){
-                    pathVertices.push_back(path[i-1]->x);
-                    pathVertices.push_back(path[i-1]->y);
-                    pathVertices.push_back(path[i]->x);
-                    pathVertices.push_back(path[i]->y);
+            if(!state.path.empty()){
+                glUniform4f(colorLoc, 0.0f, 1.0f, 0.0f, 1.0f);
+                if(!state.pathFound){
+                    for(size_t i = 1; i < state.path.size(); ++i){
+                        state.pathVertices.push_back(state.path[i-1]->x);
+                        state.pathVertices.push_back(state.path[i-1]->y);
+                        state.pathVertices.push_back(state.path[i]->x);
+                        state.pathVertices.push_back(state.path[i]->y);
+                    }
+                    updatePathBuffers(state.pathVertices);
+                    state.pathFound = true;
                 }
-                updatePathBuffers(pathVertices);
-                pathFound = true;
-            }
-            glBindVertexArray(PathVAO);
-            glDrawArrays(GL_LINES, 0, pathVertices.size() / 2);
+                glBindVertexArray(PathVAO);
+                glDrawArrays(GL_LINES, 0, state.pathVertices.size() / 2);
 
-            if(pathIndex < path.size()){
-                if(deltaTime >= 0.1f){
-                    carVertices = getCarVertices(path[pathIndex]->x, path[pathIndex]->y, path[pathIndex]->theta, carLength, carWidth);
-                    pathIndex++;
-                    lastFrame = currentFrame;
-                } 
-                glBindBuffer(GL_ARRAY_BUFFER, carVBO);
-                glBufferData(GL_ARRAY_BUFFER, carVertices.size() * sizeof(float), carVertices.data(), GL_DYNAMIC_DRAW);
-                glUniform4f(colorLoc, 0.0f, 0.0f, 1.0f, 1.0f);
-                glBindVertexArray(carVAO);
-                glDrawElements(GL_TRIANGLES, sizeof(carIndices) / sizeof(unsigned int), GL_UNSIGNED_INT, 0);
+                if(state.pathIndex < state.path.size()){
+                    if(deltaTime >= 0.1f){
+                        carVertices = getCarVertices(state.path[state.pathIndex]->x, state.path[state.pathIndex]->y, state.path[state.pathIndex]->theta, carLength, carWidth);
+                        state.pathIndex++;
+                        lastFrame = currentFrame;
+                    } 
+                    glBindBuffer(GL_ARRAY_BUFFER, carVBO);
+                    glBufferData(GL_ARRAY_BUFFER, carVertices.size() * sizeof(float), carVertices.data(), GL_DYNAMIC_DRAW);
+                    glUniform4f(colorLoc, 0.0f, 0.0f, 1.0f, 1.0f);
+                    glBindVertexArray(carVAO);
+                    glDrawElements(GL_TRIANGLES, sizeof(carIndices) / sizeof(unsigned int), GL_UNSIGNED_INT, 0);
+                }
             }
         }
         
+        if(state.startSet || state.goalSet){
+            glBindBuffer(GL_ARRAY_BUFFER, pointsVBO);
+            glBufferData(GL_ARRAY_BUFFER, state.initAndGoalVertices.size() * sizeof(float), state.initAndGoalVertices.data(), GL_DYNAMIC_DRAW);
+        }
+
         glUniform4f(colorLoc, 1.0f, 1.0f, 0.1f, 1.0f);
         glBindVertexArray(pointsVAO);
-        glDrawArrays(GL_POINTS, 0, initAndGoalVertices.size() / 2);
+        glDrawArrays(GL_POINTS, 0, state.initAndGoalVertices.size() / 2);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
