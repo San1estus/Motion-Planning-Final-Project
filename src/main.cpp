@@ -300,7 +300,7 @@ int main() {
     GLint colorLoc = glGetUniformLocation(shaderProgram, "uColor");
     
     std::vector<float> carVertices;
-    setupBuffers();
+    setupBuffers(); 
     glPointSize(10.0f);
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
