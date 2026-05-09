@@ -11,6 +11,6 @@ add_executable(RRT_car
                 src/main.cpp 
                 src/glad.c)
 
-target_include_directories(RRT_car PRIVATE dependencies)
+target_include_directories(RRT_car PRIVATE dependencies includes src)
 target_compile_definitions(${PROJECT_NAME} PRIVATE SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders/")
 target_link_libraries(RRT_car glfw OpenGL::GL)
