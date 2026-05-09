@@ -96,7 +96,7 @@ int main() {
         std::vector<float> edgeVertices;
         if(state.startAlgorithm && !state.obstacleMode){
             if(!state.goalNode){
-                state.goalNode = state.rrt.build(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.1f, 10000, 0.02f, 0.1f, state.obstacles);
+                state.goalNode = state.rrt.buildStar(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.05f, 10000, 0.01f, 0.2f, state.obstacles);
                 if(state.goalNode){
                     state.path = state.rrt.getPath(state.goalNode);
                 }

@@ -66,7 +66,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
         case GLFW_KEY_SPACE:
             if (action == GLFW_PRESS) {
                 if(state->startSet && state->goalSet) state->startAlgorithm = true;
-                state->rrt.init(-1.0f, 1.0f, -1.0f, 1.0f, state->initAndGoalVertices[0], state->initAndGoalVertices[1] );
+                state->rrt.init(-1.0f, 1.0f, -1.0f, 1.0f, state->initAndGoalVertices[0], state->initAndGoalVertices[1], state->obstacles);
             }
             break;
         case GLFW_KEY_ESCAPE:
