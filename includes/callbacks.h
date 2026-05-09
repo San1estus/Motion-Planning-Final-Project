@@ -49,6 +49,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
         case GLFW_KEY_R:
             if (action == GLFW_PRESS) {
                 state->rrt.nodes.clear();
+                state->rrt.kdTree.clear();
                 state->rrt.currIter = 0;
                 state->goalNode = nullptr;
                 state->path.clear();
