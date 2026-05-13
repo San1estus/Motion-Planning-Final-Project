@@ -191,15 +191,15 @@ struct RRT{
     std::uniform_real_distribution<float> distX;
     std::uniform_real_distribution<float> distY;
     std::uniform_real_distribution<float> distBias;
-    std::uniform_int_distribution<int> sampleV{-1, 1};
-    std::uniform_real_distribution<float> samplePhi{-PI/4, PI/4};
+    std::uniform_int_distribution<int> sampleV{0, 1};
+    std::uniform_real_distribution<float> samplePhi{-PI/8, PI/8};
     std::uniform_real_distribution<float> sampleTheta{-PI, PI};
     KDTree kdTree;
     float gammaRRT;
     float distWheels = 0.5f; 
 
     void init(float minX, float maxX, float minY, float maxY, float startX, float startY, const std::vector<Obstacle> obstacles){
-        Node* init = addNode(startX, startY, 0.0f, nullptr);
+        Node* init = addNode(startX, startY, sampleTheta(rng), nullptr);
         rng = std::mt19937(std::random_device{}());
         distX = std::uniform_real_distribution<float>(minX, maxX);
         distY = std::uniform_real_distribution<float>(minY, maxY);
@@ -208,7 +208,7 @@ struct RRT{
         for(auto obstacle : obstacles){
             obstacleArea += (obstacle.maxX-obstacle.minX) * (obstacle.maxY-obstacle.minY);
         }
-        float muFree = (4 - obstacleArea)/4.0f;
+        float muFree = (4.0f - obstacleArea)/4.0f;
         gammaRRT = sqrt(3)*sqrt(muFree/PI);
     }
 
@@ -233,11 +233,12 @@ struct RRT{
         float newX = from->x;
         float newY = from->y;
         float newTheta = from->theta;
-        int v = sampleV(rng) * 2 - 1;
+        float v = sampleV(rng) ? 1.0f : -1.0f;
         float phi = samplePhi(rng);
         for(int i = 0; i < numSteps; ++i){
             newX += v * stepSize * cos(newTheta) * cos(phi);
             newY += v * stepSize * sin(newTheta) * cos(phi);
+            if(newX > 0.95 || newX < -0.95 || newY < -0.95 || newY > 0.95) break;
             newTheta += v * stepSize * tan(phi) / distWheels;
         }
 
@@ -258,7 +259,7 @@ struct RRT{
 
             Node* nearestNode = nearest(randX, randY, randTheta);
 
-            Node* newNode = steer(nearestNode, 10, stepSize, obstacles);
+            Node* newNode = steer(nearestNode, 5, stepSize, obstacles);
             if(newNode == nullptr){
                 currIter++;
                 return nullptr;
@@ -285,7 +286,7 @@ struct RRT{
 
             Node* nearestNode = nearest(randX, randY, randTheta);
 
-            Node* newNode = steer(nearestNode, 10, stepSize, obstacles);
+            Node* newNode = steer(nearestNode, 30, stepSize*0.5f, obstacles);
             if(newNode == nullptr){
                 currIter++;
                 return nullptr;

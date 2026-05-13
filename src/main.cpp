@@ -7,7 +7,7 @@
 #include "callbacks.h"
 
 // Car dimensions
-float carLength = 0.1f;
+float carLength = 0.05f;
 float carWidth = 2/3.0f * carLength;
 
 std::vector<float> getCarVertices(float cx, float cy, float theta, float w, float h) {
@@ -58,6 +58,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_MAXIMIZED, 1);
     window = glfwCreateWindow(800, 600, "RRT", NULL, NULL);
     glfwMakeContextCurrent(window);
     
@@ -96,7 +97,7 @@ int main() {
         std::vector<float> edgeVertices;
         if(state.startAlgorithm && !state.obstacleMode){
             if(!state.goalNode){
-                state.goalNode = state.rrt.buildStar(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.05f, 10000, 0.01f, 0.2f, state.obstacles);
+                state.goalNode = state.rrt.buildStar(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.05f, 100000, 0.002f, 0.2f, state.obstacles);
                 if(state.goalNode){
                     state.path = state.rrt.getPath(state.goalNode);
                 }
