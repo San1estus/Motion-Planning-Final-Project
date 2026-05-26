@@ -1,4 +1,4 @@
-/*RRT Implementation for a simple car*/
+/*RRT Implementation for a Dubins car*/
 
 #include "config.h"
 #include "shader_utils.h"
@@ -59,7 +59,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_MAXIMIZED, 1);
-    window = glfwCreateWindow(800, 600, "RRT", NULL, NULL);
+    window = glfwCreateWindow(1920, 1080, "RRT", NULL, NULL);
     glfwMakeContextCurrent(window);
     
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -97,7 +97,7 @@ int main() {
         std::vector<float> edgeVertices;
         if(state.startAlgorithm && !state.obstacleMode){
             if(!state.goalNode){
-                state.goalNode = state.rrt.buildStar(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.05f, 100000, 0.002f, 0.2f, state.obstacles);
+                state.goalNode = state.rrt.buildStar(state.initAndGoalVertices[2], state.initAndGoalVertices[3], 0.05f, 100000, 0.002f, 0.03f, state.obstacles);
                 if(state.goalNode){
                     state.path = state.rrt.getPath(state.goalNode);
                 }

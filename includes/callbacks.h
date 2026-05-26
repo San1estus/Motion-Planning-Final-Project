@@ -9,7 +9,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     glfwGetCursorPos(window, &xpos, &ypos);
     int width, height;
     glfwGetWindowSize(window, &width, &height);
-    float xworld = (float)xpos / width * 2.0f - 1.0f;
+    float xworld = ((float)xpos / width * 2.0f - 1.0f) * aspect;
     float yworld = 1.0f - (float)ypos / height * 2.0f;
     
     if (state->obstacleMode) {
@@ -33,11 +33,13 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             state->initAndGoalVertices[0] = xworld;
             state->initAndGoalVertices[1] = yworld;
             state->startSet = true;
+            std::cout << "Start set at: (" << xworld << ", " << yworld << ")" << std::endl;
         }
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
             state->initAndGoalVertices[2] = xworld;
             state->initAndGoalVertices[3] = yworld;
             state->goalSet = true;
+            std::cout << "Goal set at: (" << xworld << ", " << yworld << ")" << std::endl;
         }
     }
 }
@@ -66,7 +68,9 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
         case GLFW_KEY_SPACE:
             if (action == GLFW_PRESS) {
                 if(state->startSet && state->goalSet) state->startAlgorithm = true;
-                state->rrt.init(-1.0f, 1.0f, -1.0f, 1.0f, state->initAndGoalVertices[0], state->initAndGoalVertices[1], state->obstacles);
+                std::cout <<"Space pressed: " << state->startAlgorithm << std::endl;
+                std::cout << "obstacleMode: " << state->obstacleMode << std::endl;
+                state->rrt.init(-aspect, aspect, -1.0f, 1.0f, state->initAndGoalVertices[0], state->initAndGoalVertices[1], state->initAndGoalVertices[2], state->initAndGoalVertices[3], state->obstacles);
             }
             break;
         case GLFW_KEY_ESCAPE:
@@ -87,7 +91,7 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     if (state->dragging) {
         int width, height;
         glfwGetWindowSize(window, &width, &height);
-        float xworld = (float)xpos / width * 2.0f - 1.0f;
+        float xworld = ((float)xpos / width * 2.0f - 1.0f) * aspect;
         float yworld = 1.0f - (float)ypos / height * 2.0f;
         state->dragX = xworld;
         state->dragY = yworld;
