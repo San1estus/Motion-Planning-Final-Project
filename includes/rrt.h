@@ -1,6 +1,7 @@
 #pragma once
 #include "config.h"
 
+// TODO: Add Catmull-Rom spline for smoother result path visualization
 extern float carLength;
 extern float carWidth;
 struct Node;
@@ -267,7 +268,7 @@ struct RRT{
     Node* steer(Node* from, float targetX, float targetY, int numSteps, float stepSize, const std::vector<Obstacle>& obstacles)
     {
         auto result = simulateSteer(from, targetX, targetY, numSteps, stepSize, obstacles, distWheels);
-
+        if(!result.valid) return nullptr;
         return addNode(result.x, result.y, result.theta, from);
     }
 
@@ -284,7 +285,7 @@ struct RRT{
 
             Node* nearestNode = nearest(randX, randY, randTheta);
 
-            Node* newNode = steer(nearestNode, randX, randY, 20, 0.02f, obstacles);
+            Node* newNode = steer(nearestNode, randX, randY, 20, 0.025f, obstacles);
             if(newNode == nullptr){
                 currIter++;
                 return nullptr;
@@ -316,7 +317,7 @@ struct RRT{
         Node* nearestNode = nearest(randX, randY, randTheta);
 
         // Initial extension
-        Node* newNode = steer(nearestNode, randX, randY, 15, 0.0025f, obstacles);
+        Node* newNode = steer(nearestNode, randX, randY, 20, 0.0025f, obstacles);
 
         if(newNode == nullptr){
             currIter++;
@@ -335,7 +336,7 @@ struct RRT{
         float bestCost = nearestNode->cost + distance(nearestNode, newNode);
 
         for(auto nearNode : xNear){
-            auto result = simulateSteer(nearNode, randX, randY, 15, 0.0025f, obstacles, distWheels);
+            auto result = simulateSteer(nearNode, randX, randY, 20, 0.0025f, obstacles, distWheels);
 
             if(!result.valid)
                 continue;
@@ -352,7 +353,7 @@ struct RRT{
         }
 
         // Rebuild node from best parent
-        auto bestResult = simulateSteer(bestParent, randX, randY, 15, 0.0025f, obstacles, distWheels);
+        auto bestResult = simulateSteer(bestParent, randX, randY, 20, 0.0025f, obstacles, distWheels);
 
         if(bestResult.valid){
             newNode->x = bestResult.x;
@@ -372,7 +373,7 @@ struct RRT{
             if(newCost >= nearNode->cost)
                 continue;
 
-            auto rewired = simulateSteer(newNode, nearNode->x, nearNode->y, 15, 0.0025f, obstacles, distWheels);
+            auto rewired = simulateSteer(newNode, nearNode->x, nearNode->y, 20, 0.0025f, obstacles, distWheels);
 
             if(!rewired.valid)
                 continue;
@@ -389,9 +390,9 @@ struct RRT{
 
             return addNode(goalX, goalY, atan2(goalY - newNode->y,  goalX - newNode->x), newNode);
         }
-
+        
         currIter++;
-
+        
         return nullptr;
     }
     

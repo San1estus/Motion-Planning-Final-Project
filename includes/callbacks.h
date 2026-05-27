@@ -25,6 +25,10 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             obs.maxX = std::max(state->obsInitX, xworld);
             obs.minY = std::min(state->obsInitY, yworld);
             obs.maxY = std::max(state->obsInitY, yworld);
+            obs.minX = std::max(obs.minX, -aspect + padding);
+            obs.maxX = std::min(obs.maxX,  aspect - padding);
+            obs.minY = std::max(obs.minY, -1.0f + padding);
+            obs.maxY = std::min(obs.maxY,  1.0f - padding);
             state->obstacles.push_back(obs);
             state->dragging = false;
         }
