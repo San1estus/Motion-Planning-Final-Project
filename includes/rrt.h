@@ -71,47 +71,33 @@ struct KDNode{
 class KDTree{
     private:
         KDNode* root;
-
+        float getCoord(Node* node, int dim) {
+            if(dim == 0) return node->x;
+            if(dim == 1) return node->y;
+            return node->theta * (aspect / PI); // Scale theta to be comparable to x and y
+        }
         KDNode* insertRecursive(KDNode* node, Node* point, int depth){
             if (node == nullptr) return new KDNode(point);
-            int currDim = depth % 2;
-            if (!currDim){ // X Axis
-                if(point->x < node->point->x){
-                    node->left = insertRecursive(node->left, point, depth+1);
-                } else{
-                    node->right = insertRecursive(node->right, point, depth+1);
-                }
-            }
-            else{// Y Axis
-                if(point->y < node->point->y){
-                    node->left = insertRecursive(node->left, point, depth+1);
-                } else{
-                    node->right = insertRecursive(node->right, point, depth+1);
-                }
+            int currDim = depth % 3;
+            if(getCoord(point, currDim) < getCoord(node->point, currDim)){
+                node->left = insertRecursive(node->left, point, depth+1);
+            } else{
+                node->right = insertRecursive(node->right, point, depth+1);
             }
 
             return node;
         }
 
-        bool searchRecursive(KDNode* node, Node* point, int depth) const {
+        bool searchRecursive(KDNode* node, Node* point, int depth){
             if (node == nullptr) return false;
 
             if (node->point == point) return true;
-            int currDim = depth % 2;
-            if (!currDim){ // X Axis
-                if(point->x < node->point->x){
+            int currDim = depth % 3;
+            if(getCoord(point, currDim) < getCoord(node->point, currDim)){
                     return searchRecursive(node->left, point, depth+1);
                 } else{
                     return searchRecursive(node->right, point, depth+1);
                 }
-            }
-            else{// Y Axis
-                if(point->y < node->point->y){
-                    return searchRecursive(node->left, point, depth+1);
-                } else{
-                    return searchRecursive(node->right, point, depth+1);
-                }
-            }
         }
         
         void nearestRecursive(KDNode* node, Node* query, int depth, Node*& best, float& bestDist){
@@ -123,22 +109,13 @@ class KDTree{
                 best = point;
                 bestDist = dist;
             }
-            int currDim = depth % 2;
-            if(!currDim){
-                if(node->left != nullptr && query->x - bestDist <= point->x){
-                    nearestRecursive(node->left, query, depth+1, best, bestDist);
-                }
-                if(node->right != nullptr && query->x <= point->x + bestDist){
-                    nearestRecursive(node->right, query, depth+1, best, bestDist);
-                } 
-            } else{
-                if(node->left != nullptr && query->y - bestDist <= point->y){
-                    nearestRecursive(node->left, query, depth+1, best, bestDist);
-                }
-                if(node->right != nullptr && query->y <= point->y + bestDist){
-                    nearestRecursive(node->right, query, depth+1, best, bestDist);
-                } 
+            int currDim = depth % 3;
+            if(node->left != nullptr && getCoord(query, currDim) - bestDist <= getCoord(point, currDim)){
+                nearestRecursive(node->left, query, depth+1, best, bestDist);
             }
+            if(node->right != nullptr && getCoord(query, currDim) <= getCoord(point, currDim) + bestDist){
+                nearestRecursive(node->right, query, depth+1, best, bestDist);
+            } 
         }
         void freeTree(KDNode* node) {
             if (!node) return;
@@ -152,21 +129,12 @@ class KDTree{
             if(distance(point, query) <= r){
                 result.push_back(point);
             }
-            int currDim = depth % 2;
-            if(!currDim){
-                if(node->left != nullptr && query->x - r <= point->x){
-                    nearRecursive(node->left, query, r, depth+1, result);
-                }
-                if(node->right != nullptr && query->x + r >= point->x){
-                    nearRecursive(node->right, query, r, depth+1, result);
-                } 
-            } else{
-                if(node->left != nullptr && query->y - r <= point->y){
-                    nearRecursive(node->left, query, r, depth+1, result);
-                }
-                if(node->right != nullptr && query->y + r >= point->y){
-                    nearRecursive(node->right, query, r, depth+1, result);
-                } 
+            int currDim = depth % 3;
+            if(node->left != nullptr && getCoord(query, currDim) - r <= getCoord(point, currDim)){
+                nearRecursive(node->left, query, r, depth+1, result);
+            }
+            if(node->right != nullptr && getCoord(query, currDim) + r >= getCoord(point, currDim)){
+                nearRecursive(node->right, query, r, depth+1, result);
             }
         }
     public:
@@ -208,8 +176,8 @@ SteerResult simulateSteer(Node* from, float targetX, float targetY, int numSteps
     float newTheta = from->theta;
 
     const float threshold = PI / 9.0f;
-
-    for(int i = 0; i < numSteps; ++i){
+    float prevX = newX, prevY = newY, prevTheta = newTheta;
+    for(int i = 0; i < numSteps; i++){
         float desiredTheta = atan2(targetY - newY, targetX - newX);
 
         float thetaDiff = normalizeAngle(desiredTheta - newTheta);
@@ -233,16 +201,19 @@ SteerResult simulateSteer(Node* from, float targetX, float targetY, int numSteps
         if(newX > aspect || newX < -aspect ||
            newY > 0.99f || newY < -0.99f)
         {
-            return {false,0,0,0};
+            return {false,prevX, prevY, prevTheta};
         }
 
         if(isInCollision(newX, newY, obstacles))
-            return {false,0,0,0};
+            return {false,prevX, prevY, prevTheta};
 
         if(std::hypot(targetX - newX, targetY - newY) < 0.01f)
         {
             break;
         }
+        prevX = newX;
+        prevY = newY;
+        prevTheta = newTheta;
     }
 
     return {true, newX, newY, newTheta};
@@ -272,7 +243,7 @@ struct RRT{
         for(auto obstacle : obstacles){
             obstacleArea += (obstacle.maxX-obstacle.minX) * (obstacle.maxY-obstacle.minY);
         }
-        float muFree = (4.0f - obstacleArea)/4.0f;
+        float muFree = (4.0f*aspect - obstacleArea)/(4.0f*aspect);
         gammaRRT = cbrtf(3)*cbrtf(muFree/PI);
     }
 
@@ -296,9 +267,6 @@ struct RRT{
     Node* steer(Node* from, float targetX, float targetY, int numSteps, float stepSize, const std::vector<Obstacle>& obstacles)
     {
         auto result = simulateSteer(from, targetX, targetY, numSteps, stepSize, obstacles, distWheels);
-
-        if(!result.valid)
-            return nullptr;
 
         return addNode(result.x, result.y, result.theta, from);
     }
