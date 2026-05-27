@@ -196,6 +196,57 @@ class KDTree{
         }
 };
 
+// Steering simulation
+struct SteerResult{
+    bool valid;
+    float x, y, theta;
+};
+
+SteerResult simulateSteer(Node* from, float targetX, float targetY, int numSteps, float stepSize, const std::vector<Obstacle>& obstacles, float distWheels = 0.15f){
+    float newX = from->x;
+    float newY = from->y;
+    float newTheta = from->theta;
+
+    const float threshold = PI / 9.0f;
+
+    for(int i = 0; i < numSteps; ++i){
+        float desiredTheta = atan2(targetY - newY, targetX - newX);
+
+        float thetaDiff = normalizeAngle(desiredTheta - newTheta);
+
+        float phi;
+
+        if(thetaDiff < -threshold)
+            phi = -maxPhi;
+        else if(thetaDiff > threshold)
+            phi = maxPhi;
+        else
+            phi = 0.0f;
+
+        newX += stepSize * cos(newTheta);
+        newY += stepSize * sin(newTheta);
+
+        newTheta += stepSize * tan(phi) / distWheels;
+
+        newTheta = normalizeAngle(newTheta);
+
+        if(newX > aspect || newX < -aspect ||
+           newY > 0.99f || newY < -0.99f)
+        {
+            return {false,0,0,0};
+        }
+
+        if(isInCollision(newX, newY, obstacles))
+            return {false,0,0,0};
+
+        if(std::hypot(targetX - newX, targetY - newY) < 0.01f)
+        {
+            break;
+        }
+    }
+
+    return {true, newX, newY, newTheta};
+}
 
 // RRT implementation
 struct RRT{
@@ -222,7 +273,7 @@ struct RRT{
             obstacleArea += (obstacle.maxX-obstacle.minX) * (obstacle.maxY-obstacle.minY);
         }
         float muFree = (4.0f - obstacleArea)/4.0f;
-        gammaRRT = sqrt(3)*sqrt(muFree/PI);
+        gammaRRT = cbrtf(3)*cbrtf(muFree/PI);
     }
 
     Node* addNode(float x, float y, float theta, Node* parent) {
@@ -242,56 +293,14 @@ struct RRT{
         return kdTree.nearest(&query);
     }
 
-    Node* steer(Node* from, float targetX, float targetY, int numSteps, float stepSize, const std::vector<Obstacle>& obstacles) {
-        // Get new state
-        float newX = from->x;
-        float newY = from->y;
-        float newTheta = from->theta;
-        float v = 1.0f; 
-        float prevX = from->x, prevY = from->y, prevTheta = from->theta;
-        float threshold = PI/9.0f;
-        // Simulate the car's motion for numSteps
-        for(int i = 0; i < numSteps; ++i){
-            // Get the steering angle towards the target
-            float desiredTheta = atan2(targetY - newY, targetX - newX);
-            float thetaDiff = normalizeAngle(desiredTheta - newTheta);
-            float phi;
-            if(distBias(rng) < 0.2f) {
-                int choice = rng() % 3;
-                if(choice == 0) phi = -maxPhi;
-                else if(choice == 1) phi = 0;
-                else phi = maxPhi;
-            } else {
-                if(thetaDiff < -threshold) {
-                    phi = -maxPhi;
-                } else if(thetaDiff > threshold) {
-                    phi = maxPhi;
-                } else {
-                    phi = 0.0f;
-                }
-            }
+    Node* steer(Node* from, float targetX, float targetY, int numSteps, float stepSize, const std::vector<Obstacle>& obstacles)
+    {
+        auto result = simulateSteer(from, targetX, targetY, numSteps, stepSize, obstacles, distWheels);
 
-            if(fabs(thetaDiff) > PI/2) {
-                phi += (rng()%2 ? 1 : -1) * 0.01f;
-            }
-            // Steer the car
-            newX += v * stepSize * cos(newTheta);
-            newY += v * stepSize * sin(newTheta);
-            newTheta += v * stepSize * tan(phi) / distWheels;
+        if(!result.valid)
+            return nullptr;
 
-            newTheta = normalizeAngle(newTheta);
-            
-            if(newX > aspect || newX < -aspect  || newY > 0.99f || newY < -0.99f) return nullptr;
-            if(isInCollision(newX, newY, obstacles))
-                return addNode(prevX, prevY, prevTheta, from);
-            if(std::hypot(targetX - newX, targetY - newY) < 0.05f)
-                break;
-            prevX = newX; prevY = newY; prevTheta = newTheta;
-        }
-        float dist = std::hypot(newX - from->x, newY - from->y);
-        // if(dist < 0.3f*numSteps*stepSize) return nullptr;
-
-        return addNode(newX, newY, newTheta, from);
+        return addNode(result.x, result.y, result.theta, from);
     }
 
     Node* build(float goalX, float goalY, float goalRadius, int maxIter, float stepSize, float goalBias, const std::vector<Obstacle>& obstacles) {
@@ -307,7 +316,7 @@ struct RRT{
 
             Node* nearestNode = nearest(randX, randY, randTheta);
 
-            Node* newNode = steer(nearestNode, randX, randY, 50, 0.02f, obstacles);
+            Node* newNode = steer(nearestNode, randX, randY, 20, 0.02f, obstacles);
             if(newNode == nullptr){
                 currIter++;
                 return nullptr;
@@ -320,53 +329,100 @@ struct RRT{
         return nullptr;
     }
 
-    Node* buildStar(float goalX, float goalY, float goalRadius, int maxIter, float stepSize, float goalBias, const std::vector<Obstacle>& obstacles) {
-        
-        if(currIter < maxIter){
-            float randX = distX(rng);
-            float randY = distY(rng);
-            float randTheta = sampleTheta(rng);
-            if(distBias(rng) < goalBias){
-                randX = goalX;
-                randY = goalY;
-                randTheta = atan2(goalY - nodes.back()->y, goalX - nodes.back()->x);
-            }
+    Node* buildStar(float goalX, float goalY, float goalRadius, int maxIter, float stepSize, float goalBias, const std::vector<Obstacle>& obstacles){
+        if(currIter >= maxIter)
+            return nullptr;
 
-            Node* nearestNode = nearest(randX, randY, randTheta);
+        // Sample
+        float randX = distX(rng);
+        float randY = distY(rng);
+        float randTheta = sampleTheta(rng);
 
-            Node* newNode = steer(nearestNode, randX, randY, 15, 0.0025f, obstacles);
-            if(newNode == nullptr){
-                currIter++;
-                return nullptr;
-            }
-            
-            size_t n = nodes.size();
-            float r_n = gammaRRT*sqrt(log(n)/n);
-            Node* minNode = nearestNode;
-            float minCost = minNode->cost + distance(minNode, newNode);
-            std::vector<Node*> xNear = kdTree.near(newNode, r_n);
-            for(auto nearNode : xNear){
-                float nearCost = nearNode->cost + distance(newNode, nearNode);
-                if(!edgeCollision(nearNode, newNode, obstacles) && nearCost < minCost){
-                    minNode = nearNode;
-                    minCost = nearCost;
-                }
-            }
-            newNode->parent = minNode;
-            newNode->cost = minCost;
-            for(auto nearNode: xNear){
-                float nearCost = newNode->cost + distance(newNode, nearNode);
-                if(!edgeCollision(nearNode, newNode, obstacles) && nearCost < nearNode->cost){
-                    nearNode->parent = newNode;
-                    nearNode->cost  = nearCost;
-                }
-            }
-
-            if(std::hypot(newNode->x - goalX, newNode->y - goalY) < goalRadius){
-                return addNode(goalX, goalY, atan2(goalY - newNode->y, goalX - newNode->x), newNode);
-            } 
-            currIter++;
+        if(distBias(rng) < goalBias){
+            randX = goalX;
+            randY = goalY;
+            randTheta = atan2(goalY - nodes.back()->y, goalX - nodes.back()->x);
         }
+
+        // Nearest
+        Node* nearestNode = nearest(randX, randY, randTheta);
+
+        // Initial extension
+        Node* newNode = steer(nearestNode, randX, randY, 15, 0.0025f, obstacles);
+
+        if(newNode == nullptr){
+            currIter++;
+            return nullptr;
+        }
+
+        // Near set
+        size_t n = nodes.size();
+        float r_n = gammaRRT * cbrtf(log((float)n)/(float)n);
+        r_n = std::min(r_n, 0.05f);
+        std::vector<Node*> xNear = kdTree.near(newNode, r_n);
+
+        // Choose best parent
+        Node* bestParent = nearestNode;
+
+        float bestCost = nearestNode->cost + distance(nearestNode, newNode);
+
+        for(auto nearNode : xNear){
+            auto result = simulateSteer(nearNode, randX, randY, 15, 0.0025f, obstacles, distWheels);
+
+            if(!result.valid)
+                continue;
+
+            Node tempNode{ result.x, result.y, result.theta, 0, nullptr};
+
+            float candidateCost = nearNode->cost + distance(nearNode, &tempNode);
+
+            if(candidateCost < bestCost){
+                bestCost = candidateCost;
+
+                bestParent = nearNode;
+            }
+        }
+
+        // Rebuild node from best parent
+        auto bestResult = simulateSteer(bestParent, randX, randY, 15, 0.0025f, obstacles, distWheels);
+
+        if(bestResult.valid){
+            newNode->x = bestResult.x;
+            newNode->y = bestResult.y;
+            newNode->theta = bestResult.theta;
+            newNode->parent = bestParent;
+            newNode->cost = bestParent->cost + distance(bestParent,  newNode);
+        }
+
+        // Rewiring
+        for(auto nearNode : xNear){
+            if(nearNode == newNode)
+                continue;
+
+            float newCost = newNode->cost + distance(newNode, nearNode);
+
+            if(newCost >= nearNode->cost)
+                continue;
+
+            auto rewired = simulateSteer(newNode, nearNode->x, nearNode->y, 15, 0.0025f, obstacles, distWheels);
+
+            if(!rewired.valid)
+                continue;
+
+            nearNode->parent = newNode;
+
+            nearNode->cost = newCost;
+        }
+
+        // Goal check
+        if(std::hypot(newNode->x - goalX,newNode->y - goalY) < goalRadius)
+        {
+            currIter++;
+
+            return addNode(goalX, goalY, atan2(goalY - newNode->y,  goalX - newNode->x), newNode);
+        }
+
+        currIter++;
 
         return nullptr;
     }
